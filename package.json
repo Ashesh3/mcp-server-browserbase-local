@@ -1,6 +1,6 @@
 {
   "name": "@ashsec/mcp-server-browserbase-local",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server for AI web browser automation with LOCAL mode support (Edge/Chrome auto-detection, persistent profiles)",
   "mcpName": "io.github.browserbase/mcp-server-browserbase",
   "license": "Apache-2.0",
