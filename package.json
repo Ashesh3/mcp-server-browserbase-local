@@ -1,7 +1,7 @@
 {
-  "name": "@browserbasehq/mcp-server-browserbase",
-  "version": "2.4.3",
-  "description": "MCP server for AI web browser automation using Browserbase and Stagehand",
+  "name": "@ashsec/mcp-server-browserbase-local",
+  "version": "1.0.0",
+  "description": "MCP server for AI web browser automation with LOCAL mode support (Edge/Chrome auto-detection, persistent profiles)",
   "mcpName": "io.github.browserbase/mcp-server-browserbase",
   "license": "Apache-2.0",
   "author": "Browserbase, Inc. (https://www.browserbase.com/)",
@@ -11,7 +11,7 @@
   "main": "./cli.js",
   "module": "./src/index.ts",
   "bin": {
-    "mcp-server-browserbase": "cli.js"
+    "mcp-server-browserbase-local": "cli.js"
   },
   "files": [
     "assets",
@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "tsc && shx chmod +x dist/*.js",
-    "prepare": "husky && pnpm build",
+    "prepare": "husky || true",
     "watch": "tsc --watch",
     "smithery": "npx @smithery/cli dev src/index.ts",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
@@ -32,7 +32,7 @@
     "lint": "eslint . --ext .ts",
     "format": "prettier --write .",
     "clean": "rm -rf dist",
-    "prepublishOnly": "pnpm clean && pnpm build",
+    "prepublishOnly": "npm run clean && npm run build",
     "pre-commit": "pnpm lint-staged",
     "changeset": "changeset",
     "version:packages": "changeset version",

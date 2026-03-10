@@ -31,6 +31,16 @@ export const createStagehandInstance = async (
     process.env.GOOGLE_API_KEY ||
     process.env.OPENAI_API_KEY ||
     process.env.ANTHROPIC_API_KEY;
+  const modelBaseURL = config.modelBaseURL || process.env.MODEL_BASE_URL;
+
+  // Build the model config object for Stagehand
+  const modelConfig = modelApiKey
+    ? {
+        apiKey: modelApiKey,
+        modelName: modelName,
+        ...(modelBaseURL && { baseURL: modelBaseURL }),
+      }
+    : modelName;
 
   let stagehand: Stagehand;
 
@@ -82,9 +92,7 @@ export const createStagehandInstance = async (
 
     stagehand = new Stagehand({
       env: "LOCAL",
-      model: modelApiKey
-        ? { apiKey: modelApiKey, modelName: modelName }
-        : modelName,
+      model: modelConfig,
       experimental: config.experimental ?? false,
       localBrowserLaunchOptions: {
         headless: lbo.headless ?? (process.env.HEADLESS !== "false" ? true : false),
@@ -103,12 +111,7 @@ export const createStagehandInstance = async (
       env: "BROWSERBASE",
       apiKey,
       projectId,
-      model: modelApiKey
-        ? {
-            apiKey: modelApiKey,
-            modelName: modelName,
-          }
-        : modelName,
+      model: modelConfig,
       ...(params.browserbaseSessionID && {
         browserbaseSessionID: params.browserbaseSessionID,
       }),

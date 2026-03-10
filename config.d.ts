@@ -104,6 +104,12 @@ export type Config = {
    */
   modelApiKey?: string;
   /**
+   * Custom base URL for the model API endpoint.
+   * Use for Azure OpenAI, self-hosted models, or API proxies.
+   * @example "https://my-resource.openai.azure.com/openai/deployments/gpt-4o"
+   */
+  modelBaseURL?: string;
+  /**
    * Enable experimental features
    *
    * @default false

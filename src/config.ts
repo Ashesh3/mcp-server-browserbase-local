@@ -65,6 +65,10 @@ export async function resolveConfig(cliOptions: CLIOptions): Promise<Config> {
       process.env.ANTHROPIC_API_KEY;
   }
 
+  if (!mergedConfig.modelBaseURL) {
+    mergedConfig.modelBaseURL = process.env.MODEL_BASE_URL;
+  }
+
   // --------------------------------
 
   // Basic validation for Browserbase keys - only required in BROWSERBASE mode
