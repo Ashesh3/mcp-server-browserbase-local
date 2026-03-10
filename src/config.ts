@@ -1,5 +1,7 @@
 import type { Config } from "../config.d.ts";
 
+const isLocalMode = process.env.STAGEHAND_ENV === "LOCAL";
+
 export type ToolCapability = "core" | string;
 
 // Define Command Line Options Structure
@@ -20,6 +22,7 @@ export type CLIOptions = {
 
 // Default Configuration Values
 const defaultConfig: Config = {
+  env: isLocalMode ? "LOCAL" : "BROWSERBASE",
   browserbaseApiKey: process.env.BROWSERBASE_API_KEY ?? "",
   browserbaseProjectId: process.env.BROWSERBASE_PROJECT_ID ?? "",
   proxies: false,
@@ -32,6 +35,19 @@ const defaultConfig: Config = {
     browserHeight: 768,
   },
   modelName: "gemini-2.0-flash", // Default Model
+  // LOCAL mode specific config
+  screenshot: {
+    enabled: process.env.SCREENSHOT_ENABLED !== "false",
+    dir: process.env.SCREENSHOT_DIR || "/tmp/stagehand-screenshots",
+    sessionId: process.env.STAGEHAND_SESSION_ID || "default",
+  },
+  localBrowserLaunchOptions: {
+    headless: process.env.HEADLESS !== "false",
+    channel: (process.env.STAGEHAND_BROWSER_CHANNEL || undefined) as NonNullable<Config["localBrowserLaunchOptions"]>["channel"],
+    preserveUserDataDir: true,
+    profileDirectory: process.env.STAGEHAND_PROFILE_DIRECTORY || undefined,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+  },
 };
 
 // Resolve final configuration by merging defaults, file config, and CLI options
@@ -43,23 +59,30 @@ export async function resolveConfig(cliOptions: CLIOptions): Promise<Config> {
   // --- Add Browserbase Env Vars ---
   if (!mergedConfig.modelApiKey) {
     mergedConfig.modelApiKey =
-      process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      process.env.ANTHROPIC_API_KEY;
   }
 
   // --------------------------------
 
-  // Basic validation for Browserbase keys - provide dummy values if not set
-  if (!mergedConfig.browserbaseApiKey) {
-    console.warn(
-      "Warning: BROWSERBASE_API_KEY environment variable not set. Using dummy value.",
-    );
-    mergedConfig.browserbaseApiKey = "dummy-browserbase-api-key";
-  }
-  if (!mergedConfig.browserbaseProjectId) {
-    console.warn(
-      "Warning: BROWSERBASE_PROJECT_ID environment variable not set. Using dummy value.",
-    );
-    mergedConfig.browserbaseProjectId = "dummy-browserbase-project-id";
+  // Basic validation for Browserbase keys - only required in BROWSERBASE mode
+  if (mergedConfig.env !== "LOCAL") {
+    if (!mergedConfig.browserbaseApiKey) {
+      console.warn(
+        "Warning: BROWSERBASE_API_KEY environment variable not set. Using dummy value.",
+      );
+      mergedConfig.browserbaseApiKey = "dummy-browserbase-api-key";
+    }
+    if (!mergedConfig.browserbaseProjectId) {
+      console.warn(
+        "Warning: BROWSERBASE_PROJECT_ID environment variable not set. Using dummy value.",
+      );
+      mergedConfig.browserbaseProjectId = "dummy-browserbase-project-id";
+    }
+  } else {
+    console.log("[Config] Running in LOCAL mode - Browserbase credentials not required");
   }
 
   if (!mergedConfig.modelApiKey) {

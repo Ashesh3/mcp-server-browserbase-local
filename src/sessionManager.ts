@@ -3,6 +3,7 @@ import type { Config } from "../config.d.ts";
 import { clearScreenshotsForSession } from "./mcp/resources.js";
 import type { BrowserSession, CreateSessionParams } from "./types/types.js";
 import { randomUUID } from "crypto";
+import { discoverBrowser, getStableUserDataDir } from "./utils/browserDiscovery.js";
 
 /**
  * Create a configured Stagehand instance
@@ -14,58 +15,130 @@ export const createStagehandInstance = async (
   params: CreateSessionParams = {},
   sessionId: string,
 ): Promise<Stagehand> => {
+  const isLocalMode = config.env === "LOCAL";
   const apiKey = params.apiKey || config.browserbaseApiKey;
   const projectId = params.projectId || config.browserbaseProjectId;
 
-  if (!apiKey || !projectId) {
-    throw new Error("Browserbase API Key and Project ID are required");
+  // Only require Browserbase credentials in BROWSERBASE mode
+  if (!isLocalMode && (!apiKey || !projectId)) {
+    throw new Error("Browserbase API Key and Project ID are required for BROWSERBASE mode");
   }
 
   const modelName = params.modelName || config.modelName || "gemini-2.0-flash";
   const modelApiKey =
     config.modelApiKey ||
     process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY;
+    process.env.GOOGLE_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY;
 
-  const stagehand = new Stagehand({
-    env: "BROWSERBASE",
-    apiKey,
-    projectId,
-    model: modelApiKey
-      ? {
-          apiKey: modelApiKey,
-          modelName: modelName,
-        }
-      : modelName,
-    ...(params.browserbaseSessionID && {
-      browserbaseSessionID: params.browserbaseSessionID,
-    }),
-    experimental: config.experimental ?? false,
-    browserbaseSessionCreateParams: {
+  let stagehand: Stagehand;
+
+  if (isLocalMode) {
+    const lbo = config.localBrowserLaunchOptions ?? {};
+    const channel = lbo.channel || process.env.STAGEHAND_BROWSER_CHANNEL;
+
+    // Auto-discover browser executable if not explicitly set
+    let executablePath = lbo.executablePath || process.env.CHROME_PATH;
+    let browserName = "chromium";
+    if (!executablePath) {
+      const discovered = discoverBrowser(channel);
+      if (discovered) {
+        executablePath = discovered.executablePath;
+        browserName = discovered.browserName;
+        process.stderr.write(
+          `[SessionManager] Auto-detected ${browserName} at: ${executablePath}\n`,
+        );
+      }
+    } else {
+      browserName = executablePath.toLowerCase().includes("edge") ? "msedge" : "chrome";
+    }
+
+    // Use a STABLE user data dir (not a random temp dir) so logins persist
+    const userDataDir = lbo.userDataDir
+      || process.env.STAGEHAND_USER_DATA_DIR
+      || getStableUserDataDir(browserName);
+
+    // Build extra args
+    const extraArgs: string[] = [
+      ...(lbo.args ?? []),
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+    ];
+
+    // Add --profile-directory if specified (for multi-profile Edge)
+    const profileDir = lbo.profileDirectory || process.env.STAGEHAND_PROFILE_DIRECTORY;
+    if (profileDir) {
+      extraArgs.push(`--profile-directory=${profileDir}`);
+    }
+
+    process.stderr.write(
+      `[SessionManager] Creating LOCAL ${browserName} session ${sessionId}\n`,
+    );
+    process.stderr.write(
+      `[SessionManager] User data dir: ${userDataDir}\n`,
+    );
+
+    stagehand = new Stagehand({
+      env: "LOCAL",
+      model: modelApiKey
+        ? { apiKey: modelApiKey, modelName: modelName }
+        : modelName,
+      experimental: config.experimental ?? false,
+      localBrowserLaunchOptions: {
+        headless: lbo.headless ?? (process.env.HEADLESS !== "false" ? true : false),
+        executablePath,
+        userDataDir,
+        preserveUserDataDir: lbo.preserveUserDataDir ?? true,
+        args: extraArgs,
+      },
+      logger: (logLine) => {
+        console.error(`Stagehand[LOCAL][${sessionId}]: ${logLine.message}`);
+      },
+    });
+  } else {
+    // BROWSERBASE mode - original cloud browser code
+    stagehand = new Stagehand({
+      env: "BROWSERBASE",
+      apiKey,
       projectId,
-      proxies: config.proxies,
-      keepAlive: config.keepAlive ?? false,
-      browserSettings: {
-        viewport: {
-          width: config.viewPort?.browserWidth ?? 1288,
-          height: config.viewPort?.browserHeight ?? 711,
+      model: modelApiKey
+        ? {
+            apiKey: modelApiKey,
+            modelName: modelName,
+          }
+        : modelName,
+      ...(params.browserbaseSessionID && {
+        browserbaseSessionID: params.browserbaseSessionID,
+      }),
+      experimental: config.experimental ?? false,
+      browserbaseSessionCreateParams: {
+        projectId,
+        proxies: config.proxies,
+        keepAlive: config.keepAlive ?? false,
+        browserSettings: {
+          viewport: {
+            width: config.viewPort?.browserWidth ?? 1288,
+            height: config.viewPort?.browserHeight ?? 711,
+          },
+          context: config.context?.contextId
+            ? {
+                id: config.context?.contextId,
+                persist: config.context?.persist ?? true,
+              }
+            : undefined,
+          advancedStealth: config.advancedStealth ?? undefined,
         },
-        context: config.context?.contextId
-          ? {
-              id: config.context?.contextId,
-              persist: config.context?.persist ?? true,
-            }
-          : undefined,
-        advancedStealth: config.advancedStealth ?? undefined,
+        userMetadata: {
+          mcp: "true",
+        },
       },
-      userMetadata: {
-        mcp: "true",
+      logger: (logLine) => {
+        console.error(`Stagehand[${sessionId}]: ${logLine.message}`);
       },
-    },
-    logger: (logLine) => {
-      console.error(`Stagehand[${sessionId}]: ${logLine.message}`);
-    },
-  });
+    });
+  }
 
   await stagehand.init();
   return stagehand;
@@ -142,25 +215,30 @@ export class SessionManager {
     config: Config,
     resumeSessionId?: string,
   ): Promise<BrowserSession> {
-    if (!config.browserbaseApiKey) {
-      throw new Error("Browserbase API Key is missing in the configuration.");
-    }
-    if (!config.browserbaseProjectId) {
-      throw new Error(
-        "Browserbase Project ID is missing in the configuration.",
-      );
+    const isLocalMode = config.env === "LOCAL";
+
+    // Only validate Browserbase credentials in BROWSERBASE mode
+    if (!isLocalMode) {
+      if (!config.browserbaseApiKey) {
+        throw new Error("Browserbase API Key is missing in the configuration.");
+      }
+      if (!config.browserbaseProjectId) {
+        throw new Error(
+          "Browserbase Project ID is missing in the configuration.",
+        );
+      }
     }
 
     try {
       process.stderr.write(
-        `[SessionManager] ${resumeSessionId ? "Resuming" : "Creating"} Stagehand session ${newSessionId}...\n`,
+        `[SessionManager] ${resumeSessionId ? "Resuming" : "Creating"} ${isLocalMode ? "LOCAL" : "BROWSERBASE"} Stagehand session ${newSessionId}...\n`,
       );
 
       // Create and initialize Stagehand instance using shared function
       const stagehand = await createStagehandInstance(
         config,
         {
-          ...(resumeSessionId && { browserbaseSessionID: resumeSessionId }),
+          ...(resumeSessionId && !isLocalMode && { browserbaseSessionID: resumeSessionId }),
         },
         newSessionId,
       );
@@ -170,20 +248,28 @@ export class SessionManager {
         throw new Error("No pages available in Stagehand context");
       }
 
-      const browserbaseSessionId = stagehand.browserbaseSessionId;
-
-      if (!browserbaseSessionId) {
-        throw new Error(
-          "Browserbase session ID is required but was not returned by Stagehand",
+      // In LOCAL mode, use the newSessionId as the session identifier
+      // In BROWSERBASE mode, use the browserbaseSessionId from Stagehand
+      let browserbaseSessionId: string;
+      if (isLocalMode) {
+        browserbaseSessionId = newSessionId;
+        process.stderr.write(
+          `[SessionManager] LOCAL Stagehand initialized with session: ${browserbaseSessionId}\n`,
+        );
+      } else {
+        browserbaseSessionId = stagehand.browserbaseSessionId!;
+        if (!browserbaseSessionId) {
+          throw new Error(
+            "Browserbase session ID is required but was not returned by Stagehand",
+          );
+        }
+        process.stderr.write(
+          `[SessionManager] Stagehand initialized with Browserbase session: ${browserbaseSessionId}\n`,
+        );
+        process.stderr.write(
+          `[SessionManager] Browserbase Live Debugger URL: https://www.browserbase.com/sessions/${browserbaseSessionId}\n`,
         );
       }
-
-      process.stderr.write(
-        `[SessionManager] Stagehand initialized with Browserbase session: ${browserbaseSessionId}\n`,
-      );
-      process.stderr.write(
-        `[SessionManager] Browserbase Live Debugger URL: https://www.browserbase.com/sessions/${browserbaseSessionId}\n`,
-      );
 
       const sessionObj: BrowserSession = {
         page,

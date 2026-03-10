@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Tool, ToolSchema, ToolResult } from "./tool.js";
 import type { Context } from "../context.js";
 import type { ToolActionResult } from "../types/types.js";
+import { captureScreenshot, formatScreenshotMarker } from "../utils/screenshot.js";
 
 const NavigateInputSchema = z.object({
   url: z.string().describe("The URL to navigate to"),
@@ -23,6 +24,7 @@ async function handleNavigate(
   const action = async (): Promise<ToolActionResult> => {
     try {
       const stagehand = await context.getStagehand();
+      const isLocalMode = context.config.env === "LOCAL";
 
       const pages = stagehand.context.pages();
       const page = pages[0];
@@ -32,16 +34,27 @@ async function handleNavigate(
       }
       await page.goto(params.url, { waitUntil: "domcontentloaded" });
 
-      const sessionId = stagehand.browserbaseSessionId;
-      if (!sessionId) {
-        throw new Error("No Browserbase session ID available");
+      // In LOCAL mode, we don't need browserbaseSessionId
+      if (!isLocalMode) {
+        const sessionId = stagehand.browserbaseSessionId;
+        if (!sessionId) {
+          throw new Error("No Browserbase session ID available");
+        }
       }
+
+      // Capture screenshot after navigation (LOCAL mode disk save)
+      const screenshotPath = await captureScreenshot(
+        page,
+        `navigate: ${params.url}`,
+        context.config.screenshot,
+      );
+      const screenshotMarker = formatScreenshotMarker(screenshotPath);
 
       return {
         content: [
           {
             type: "text",
-            text: `Navigated to: ${params.url}`,
+            text: `Navigated to: ${params.url}${screenshotMarker}`,
           },
         ],
       };

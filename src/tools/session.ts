@@ -76,36 +76,51 @@ async function handleCreateSession(
 
       // Note: No need to set context.currentSessionId - SessionManager handles this
       // and context.currentSessionId is a getter that delegates to SessionManager
-      const bb = new Browserbase({
-        apiKey: config.browserbaseApiKey,
-      });
+      const isLocalMode = config.env === "LOCAL";
 
-      const browserbaseSessionId = session.stagehand.browserbaseSessionId;
-      if (!browserbaseSessionId) {
-        throw new Error(
-          "Browserbase session ID not found in Stagehand instance",
-        );
+      if (isLocalMode) {
+        // LOCAL mode - no Browserbase SDK needed
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Local browser session created successfully. Session ID: ${session.sessionId}`,
+            },
+          ],
+        };
+      } else {
+        // BROWSERBASE mode - get debug URL from Browserbase SDK
+        const bb = new Browserbase({
+          apiKey: config.browserbaseApiKey,
+        });
+
+        const browserbaseSessionId = session.stagehand.browserbaseSessionId;
+        if (!browserbaseSessionId) {
+          throw new Error(
+            "Browserbase session ID not found in Stagehand instance",
+          );
+        }
+        const debugUrl = (await bb.sessions.debug(browserbaseSessionId))
+          .debuggerFullscreenUrl;
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Browserbase Live Session View URL: https://www.browserbase.com/sessions/${browserbaseSessionId}`,
+            },
+            {
+              type: "text",
+              text: `Browserbase Live Debugger URL: ${debugUrl}`,
+            },
+            createUIResource({
+              uri: "ui://analytics-dashboard/main",
+              content: { type: "externalUrl", iframeUrl: debugUrl },
+              encoding: "text",
+            }) as unknown as TextContent,
+          ],
+        };
       }
-      const debugUrl = (await bb.sessions.debug(browserbaseSessionId))
-        .debuggerFullscreenUrl;
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Browserbase Live Session View URL: https://www.browserbase.com/sessions/${browserbaseSessionId}`,
-          },
-          {
-            type: "text",
-            text: `Browserbase Live Debugger URL: ${debugUrl}`,
-          },
-          createUIResource({
-            uri: "ui://analytics-dashboard/main",
-            content: { type: "externalUrl", iframeUrl: debugUrl },
-            encoding: "text",
-          }) as unknown as TextContent,
-        ],
-      };
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -195,8 +210,9 @@ async function handleCloseSession(context: Context): Promise<ToolResult> {
     }
 
     if (cleanupSuccessful) {
-      let successMessage = `Browserbase session (${previousSessionId || "default"}) closed successfully. Context reset to default.`;
-      if (browserbaseSessionId && previousSessionId !== defaultSessionId) {
+      const isLocalMode = context.config.env === "LOCAL";
+      let successMessage = `Browser session (${previousSessionId || "default"}) closed successfully. Context reset to default.`;
+      if (!isLocalMode && browserbaseSessionId && previousSessionId !== defaultSessionId) {
         successMessage += ` View replay at https://www.browserbase.com/sessions/${browserbaseSessionId}`;
       }
       return { content: [{ type: "text", text: successMessage }] };

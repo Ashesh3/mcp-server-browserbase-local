@@ -93,7 +93,7 @@ async function handleScreenshot(
             .toISOString()
             .replace(/:/g, "-")}`
         : `screenshot-${new Date().toISOString().replace(/:/g, "-")}` +
-          context.config.browserbaseProjectId;
+          (context.config.browserbaseProjectId || "local");
 
       // Associate with current mcp session id and store in memory /src/mcp/resources.ts
       const sessionId = context.currentSessionId;

@@ -2,13 +2,18 @@ import type { AvailableModelSchema } from "@browserbasehq/stagehand";
 
 export type Config = {
   /**
+   * Environment mode: "BROWSERBASE" (cloud) or "LOCAL" (local headless browser)
+   * @default "BROWSERBASE"
+   */
+  env?: "BROWSERBASE" | "LOCAL";
+  /**
    * Browserbase API Key to authenticate requests
    */
-  browserbaseApiKey: string;
+  browserbaseApiKey?: string;
   /**
    * Browserbase Project ID associated with the API key
    */
-  browserbaseProjectId: string;
+  browserbaseProjectId?: string;
   /**
    * Whether or not to use Browserbase proxies
    * https://docs.browserbase.com/features/proxies
@@ -104,4 +109,54 @@ export type Config = {
    * @default false
    */
   experimental?: boolean;
+  /**
+   * Screenshot configuration for LOCAL mode
+   */
+  screenshot?: {
+    /**
+     * Enable screenshot capture after each action
+     * @default true
+     */
+    enabled?: boolean;
+    /**
+     * Directory to save screenshots
+     * @default "/tmp/stagehand-screenshots"
+     */
+    dir?: string;
+    /**
+     * Session ID for organizing screenshots
+     */
+    sessionId?: string;
+  };
+  /**
+   * Local browser launch options (only for LOCAL mode)
+   */
+  localBrowserLaunchOptions?: {
+    headless?: boolean;
+    executablePath?: string;
+    args?: string[];
+    /**
+     * Browser channel to use. When set to "msedge", the server will
+     * auto-detect the Edge executable path if executablePath is not set.
+     * @default undefined (uses chrome-launcher's default Chrome discovery)
+     */
+    channel?: "msedge" | "msedge-beta" | "msedge-canary" | "msedge-dev" | "chrome" | "chrome-beta" | "chrome-canary" | "chrome-dev";
+    /**
+     * User data directory for browser profile persistence.
+     * If not set, a stable platform-specific default is used (not a random temp dir).
+     */
+    userDataDir?: string;
+    /**
+     * Keep the user data directory after browser closes.
+     * @default true
+     */
+    preserveUserDataDir?: boolean;
+    /**
+     * Edge/Chrome profile subdirectory within the user data dir.
+     * e.g. "Default", "Profile 1", "Profile 2"
+     * Maps to --profile-directory Chrome flag.
+     * @default "Default"
+     */
+    profileDirectory?: string;
+  };
 };

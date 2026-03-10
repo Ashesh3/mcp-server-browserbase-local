@@ -21,10 +21,18 @@ import {
 // Configuration schema for Smithery - matches existing Config interface
 export const configSchema = z
   .object({
-    browserbaseApiKey: z.string().describe("The Browserbase API Key to use"),
+    env: z
+      .enum(["BROWSERBASE", "LOCAL"])
+      .optional()
+      .describe("Environment mode: BROWSERBASE (cloud) or LOCAL (local headless browser)"),
+    browserbaseApiKey: z
+      .string()
+      .optional()
+      .describe("The Browserbase API Key to use (required for BROWSERBASE mode)"),
     browserbaseProjectId: z
       .string()
-      .describe("The Browserbase Project ID to use"),
+      .optional()
+      .describe("The Browserbase Project ID to use (required for BROWSERBASE mode)"),
     proxies: z
       .boolean()
       .optional()
@@ -112,11 +120,16 @@ export const configSchema = z
 
 // Default function for Smithery
 export default function ({ config }: { config: z.infer<typeof configSchema> }) {
-  if (!config.browserbaseApiKey) {
-    throw new Error("browserbaseApiKey is required");
-  }
-  if (!config.browserbaseProjectId) {
-    throw new Error("browserbaseProjectId is required");
+  const isLocalMode = config.env === "LOCAL" || process.env.STAGEHAND_ENV === "LOCAL";
+
+  // Only require Browserbase credentials in BROWSERBASE mode
+  if (!isLocalMode) {
+    if (!config.browserbaseApiKey) {
+      throw new Error("browserbaseApiKey is required for BROWSERBASE mode");
+    }
+    if (!config.browserbaseProjectId) {
+      throw new Error("browserbaseProjectId is required for BROWSERBASE mode");
+    }
   }
 
   const server = new McpServer({
@@ -133,7 +146,10 @@ export default function ({ config }: { config: z.infer<typeof configSchema> }) {
     },
   });
 
-  const internalConfig: Config = config as Config;
+  const internalConfig: Config = {
+    ...config,
+    env: isLocalMode ? "LOCAL" : "BROWSERBASE",
+  } as Config;
 
   // Create the context, passing server instance and config
   const contextId = randomUUID();
