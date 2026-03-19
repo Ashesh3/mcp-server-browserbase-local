@@ -18,6 +18,7 @@ export type CLIOptions = {
   modelApiKey?: string;
   keepAlive?: boolean;
   experimental?: boolean;
+  proxyServer?: string;
 };
 
 // Default Configuration Values
@@ -124,6 +125,7 @@ export async function configFromCLIOptions(
     modelApiKey: cliOptions.modelApiKey,
     keepAlive: cliOptions.keepAlive,
     experimental: cliOptions.experimental,
+    proxyServer: cliOptions.proxyServer,
   };
 }
 

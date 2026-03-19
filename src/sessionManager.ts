@@ -83,6 +83,11 @@ export const createStagehandInstance = async (
       extraArgs.push(`--profile-directory=${profileDir}`);
     }
 
+    // Add --proxy-server if specified
+    if (config.proxyServer) {
+      extraArgs.push(`--proxy-server=${config.proxyServer}`);
+    }
+
     process.stderr.write(
       `[SessionManager] Creating LOCAL ${browserName} session ${sessionId}\n`,
     );

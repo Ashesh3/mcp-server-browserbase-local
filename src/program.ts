@@ -62,6 +62,10 @@ program
   )
   .option("--keepAlive", "Enable Browserbase Keep Alive Session")
   .option("--experimental", "Enable experimental features")
+  .option(
+    "--proxyServer <url>",
+    "Proxy server URL for LOCAL mode (e.g. socks5://127.0.0.1:1080 or http://127.0.0.1:8080)",
+  )
   .action(async (options) => {
     const config = await resolveConfig(options);
     const serverList = new ServerList(async () =>
