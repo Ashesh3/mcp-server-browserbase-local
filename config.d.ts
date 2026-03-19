@@ -116,6 +116,14 @@ export type Config = {
    */
   experimental?: boolean;
   /**
+   * Proxy server URL to route browser traffic through (LOCAL mode only).
+   * Passed as --proxy-server=<value> to the browser launch args.
+   * Supports http://, socks4://, socks5://, and socks5h:// proxy URLs.
+   * @example "socks5://127.0.0.1:1080"
+   * @example "http://127.0.0.1:8080"
+   */
+  proxyServer?: string;
+  /**
    * Screenshot configuration for LOCAL mode
    */
   screenshot?: {
